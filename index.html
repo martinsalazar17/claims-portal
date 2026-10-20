@@ -3,37 +3,50 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#ffffff">
 <title>SGPA Claims Management System — USC</title>
+
+<!-- Browser tab icon (transparent background) -->
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <style>
   html, body {
     margin: 0;
     padding: 0;
     height: 100%;
     overflow: hidden;
-    background: #1e3a5f;
-    font-family: Arial, sans-serif;
+    background: #ffffff;
   }
+
+  /* ── VIDEO LOADER ── */
   #loader {
     position: fixed;
     inset: 0;
+    z-index: 2;
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
-    color: #fff;
-    z-index: 2;
-    transition: opacity 0.3s ease;
+    background: #ffffff;
+    transition: opacity 0.5s cubic-bezier(.16,.8,.24,1),
+                filter  0.5s cubic-bezier(.16,.8,.24,1);
   }
-  #loader .spinner {
-    width: 36px;
-    height: 36px;
-    border: 3px solid rgba(255,255,255,0.25);
-    border-top-color: #f0c040;
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-    margin-bottom: 14px;
+  #loader.loader-hide {
+    opacity: 0;
+    filter: blur(6px);
+    pointer-events: none;
   }
-  @keyframes spin { to { transform: rotate(360deg); } }
+  #loader-video {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    background: #ffffff;
+    /* Makes near-white video pixels blend into the white page, hiding any box edges */
+    mix-blend-mode: multiply;
+  }
+
+  /* ── APP FRAME ── */
   #app-frame {
     position: fixed;
     top: 0; left: 0;
@@ -41,14 +54,90 @@
     height: 100%;
     border: none;
     z-index: 1;
+    opacity: 0;
+    filter: blur(10px);
+    transform: scale(1.015) translateY(10px);
+    transition: opacity 0.7s cubic-bezier(.16,.8,.24,1),
+                filter  0.7s cubic-bezier(.16,.8,.24,1),
+                transform 0.7s cubic-bezier(.16,.8,.24,1);
+  }
+  #app-frame.frame-ready {
+    opacity: 1;
+    filter: blur(0);
+    transform: scale(1) translateY(0);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #loader, #app-frame {
+      transition: none !important;
+      filter: none !important;
+      transform: none !important;
+    }
+    #loader-video { display: none; }
   }
 </style>
+
+<script>
+  // The app is revealed only when BOTH are true:
+  //   1) the video has finished (or failed / was skipped), and
+  //   2) the GAS app has finished loading in the hidden iframe.
+  var VIDEO_MAX_WAIT_MS = 8000;   // never hold the student longer than this for the video
+  var HARD_TIMEOUT_MS   = 12000;  // reveal regardless (slow network safety net)
+
+  var frameLoaded = false;
+  var videoDone   = false;
+  var revealed    = false;
+
+  function revealApp() {
+    if (revealed) return;
+    revealed = true;
+    document.getElementById('app-frame').classList.add('frame-ready');
+    var loader = document.getElementById('loader');
+    loader.classList.add('loader-hide');
+    setTimeout(function () {
+      loader.style.display = 'none';
+      var v = document.getElementById('loader-video');
+      if (v) { v.pause(); }
+    }, 600);
+  }
+
+  function tryReveal() {
+    if (frameLoaded && videoDone) revealApp();
+  }
+
+  function onFrameLoad() { frameLoaded = true; tryReveal(); }
+  function onVideoDone() { videoDone = true;   tryReveal(); }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    var v = document.getElementById('loader-video');
+    var reduceMotion = window.matchMedia &&
+                       window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    if (!v || reduceMotion) { onVideoDone(); return; }
+
+    v.addEventListener('ended', onVideoDone);
+    v.addEventListener('error', onVideoDone);   // file missing / unsupported -> skip video
+
+    // Autoplay can be blocked (e.g. iOS Low Power Mode). If so, skip straight to the app.
+    var p = v.play();
+    if (p && typeof p.catch === 'function') p.catch(onVideoDone);
+
+    setTimeout(onVideoDone, VIDEO_MAX_WAIT_MS);
+  });
+
+  setTimeout(revealApp, HARD_TIMEOUT_MS);
+</script>
 </head>
 <body>
 
   <div id="loader">
-    <div class="spinner"></div>
-    <div>Loading Claims Management System…</div>
+    <video id="loader-video"
+           src="loading.mp4"
+           muted
+           playsinline
+           autoplay
+           preload="auto"
+           aria-hidden="true"></video>
   </div>
 
   <iframe
@@ -56,7 +145,7 @@
     src="https://script.google.com/a/macros/usc.edu.ph/s/AKfycbwBw5ZPRVPTmeIOHfTloJIUdt1V6nadipNaVOY2CqpvxV6I-rslVXv9KlyvSCDMUFBgiw/exec"
     title="SGPA Claims Management System"
     allow="clipboard-write"
-    onload="document.getElementById('loader').style.opacity='0'; setTimeout(function(){document.getElementById('loader').style.display='none';}, 300);">
+    onload="onFrameLoad()">
   </iframe>
 
 </body>
